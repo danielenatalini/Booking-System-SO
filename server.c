@@ -67,8 +67,6 @@ static const char *status_to_string(Status s) {
     return "unknown";
 }
 
-/* No system call in the course examples gives "today's date";
-   time()/localtime() is the only way to get it from the OS. */
 static int is_date_in_past(const char *date) {
     int day, month, year;
     sscanf(date, "%2d/%2d/%4d", &day, &month, &year);
@@ -91,7 +89,6 @@ static void handle_login(int sock, const char *username, const char *password, S
         return;
     }
 
-    /* reload fresh each time, so a just-registered user works right away */
     User user_list[MAX_USERS];
     int num_users = load_users(user_list, MAX_USERS);
     if (num_users < 0) {
@@ -405,6 +402,24 @@ static void handle_status_change(int sock, char *id_text, Status new_status, Ses
         release_lock();
         send_error(sock, "NOTFOUND", "No booking with this ID exists");
         return;
+    }
+
+    /* Before approving, verify it doesn't conflict with another
+       active (non-rejected) booking on the same resource/time. */
+    if (new_status == STATUS_APPROVED) {
+        int j;
+        for (j = 0; j < n; j++) {
+            if (j == found_index) continue;
+            if (list[j].status == STATUS_REJECTED) continue;
+            if (strcasecmp(list[j].resource, list[found_index].resource) != 0) continue;
+            if (intervals_overlap(list[j].date, list[j].start_time, list[j].end_time,
+                                   list[found_index].date, list[found_index].start_time,
+                                   list[found_index].end_time)) {
+                release_lock();
+                send_error(sock, "CONFLICT", "Approving this booking would conflict with another active booking");
+                return;
+            }
+        }
     }
 
     list[found_index].status = new_status;

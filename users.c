@@ -52,17 +52,21 @@ int check_login(User list[], int num_elements,
 int acquire_users_lock(void) {
     int fd;
     int attempts = 0;
+    int tried_stale_cleanup = 0;
     while ((fd = open(USERS_LOCK_FILE, O_CREAT | O_EXCL, 0644)) == -1) {
         if (errno != EEXIST) {
             perror("acquire_users_lock");
             return -1;
         }
 
-        struct stat info;
-        if (stat(USERS_LOCK_FILE, &info) == 0) {
-            if (time(NULL) - info.st_mtime > 10) {
-                unlink(USERS_LOCK_FILE);
+        if (!tried_stale_cleanup) {
+            struct stat info;
+            if (stat(USERS_LOCK_FILE, &info) == 0) {
+                if (time(NULL) - info.st_mtime > 10) {
+                    unlink(USERS_LOCK_FILE);
+                }
             }
+            tried_stale_cleanup = 1;
         }
 
         usleep(10000);

@@ -13,8 +13,16 @@ int is_valid_date_format(const char *date) {
 
     int day, month, year;
     if (sscanf(date, "%2d/%2d/%4d", &day, &month, &year) != 3) return 0;
-    if (day < 1 || day > 31) return 0;
     if (month < 1 || month > 12) return 0;
+
+    int days_in_month[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int max_day = days_in_month[month];
+    if (month == 2) {
+        int leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+        if (leap) max_day = 29;
+    }
+    if (day < 1 || day > max_day) return 0;
+
     return 1;
 }
 
