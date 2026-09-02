@@ -18,6 +18,7 @@
 int acquire_lock(void) {
     int fd;
     int attempts = 0;
+    int tried_stale_cleanup = 0;
     while ((fd = open(LOCK_FILE, O_CREAT | O_EXCL, 0644)) == -1) {
         if (errno != EEXIST) {
             perror("acquire_lock");
@@ -25,14 +26,21 @@ int acquire_lock(void) {
         }
 
         /* If the lock file is old (a crashed process left it behind),
-           remove it instead of waiting forever. A normal lock is
-           held only for the time of a read+write, so anything older
-           than a few seconds is almost certainly orphaned. */
-        struct stat info;
-        if (stat(LOCK_FILE, &info) == 0) {
-            if (time(NULL) - info.st_mtime > 10) {
-                unlink(LOCK_FILE);
+           remove it instead of waiting forever. Only try this ONCE
+           per call: repeatedly re-checking on every loop iteration
+           would let two waiting processes both decide the lock is
+           stale and race to unlink() it, with one of them possibly
+           deleting a lock that a third process just legitimately
+           created in the meantime. Trying only once keeps that
+           window small. */
+        if (!tried_stale_cleanup) {
+            struct stat info;
+            if (stat(LOCK_FILE, &info) == 0) {
+                if (time(NULL) - info.st_mtime > 10) {
+                    unlink(LOCK_FILE);
+                }
             }
+            tried_stale_cleanup = 1;
         }
 
         usleep(10000);
