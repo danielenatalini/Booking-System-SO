@@ -118,7 +118,7 @@ static void standard_menu(int sock) {
             /* Buffers larger than MAX_DATE/MAX_TIME: fgets needs room
                to also consume the trailing '\n'. */
             char resource[MAX_FIELD], date[32], start_time[16], end_time[16];
-            printf("Resource (e.g. Room1): ");
+            printf("Resource (Room1 to Room10): ");
             read_line(resource, sizeof(resource));
             printf("Date (DD/MM/YYYY): ");
             read_line(date, sizeof(date));
@@ -255,7 +255,7 @@ int main(void) {
 
         if (atoi(initial_choice) == 2) {
             char new_username[MAX_FIELD], new_password[MAX_FIELD];
-            printf("Choose a username (e.g. name.surname): ");
+            printf("Choose a username (format: name.surname): ");
             read_line(new_username, sizeof(new_username));
             printf("Choose a password: ");
             read_line(new_password, sizeof(new_password));

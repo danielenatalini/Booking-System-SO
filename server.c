@@ -159,8 +159,12 @@ static void handle_new(int sock, char *resource, char *date,
         send_error(sock, "AUTH", "You must log in first");
         return;
     }
-    if (resource == NULL || date == NULL || start_time == NULL || end_time == NULL) {
+        if (resource == NULL || date == NULL || start_time == NULL || end_time == NULL) {
         send_error(sock, "SYNTAX", "Usage: NEW;resource;date;start_time;end_time");
+        return;
+    }
+    if (!is_valid_resource(resource)) {
+        send_error(sock, "SYNTAX", "Resource must be Room1 to Room10");
         return;
     }
     if (!is_valid_date_format(date)) {
@@ -175,8 +179,12 @@ static void handle_new(int sock, char *resource, char *date,
         send_error(sock, "SYNTAX", "Cannot book a date in the past");
         return;
     }
-    if (time_to_minutes(start_time) >= time_to_minutes(end_time)) {
+        if (time_to_minutes(start_time) >= time_to_minutes(end_time)) {
         send_error(sock, "SYNTAX", "Start time must be earlier than end time");
+        return;
+    }
+    if (time_to_minutes(start_time) < 8 * 60 || time_to_minutes(end_time) > 20 * 60) {
+        send_error(sock, "SYNTAX", "Bookings are only allowed between 08:00 and 20:00");
         return;
     }
 
@@ -209,8 +217,12 @@ static void handle_new(int sock, char *resource, char *date,
     new_booking.id = next_id(list, n);
     strncpy(new_booking.resource, resource, MAX_FIELD - 1);
     new_booking.resource[MAX_FIELD - 1] = '\0';
-    for (int i = 0; new_booking.resource[i] != '\0'; i++) {
-        new_booking.resource[i] = tolower((unsigned char) new_booking.resource[i]);
+    /* is_valid_resource() already guaranteed the format "Room" + a
+       number 1-10, so we can rebuild it in a canonical, consistent
+       capitalization ("Room1") instead of just lowercasing it. */
+    {
+        int room_number = atoi(new_booking.resource + 4);
+        snprintf(new_booking.resource, MAX_FIELD, "Room%d", room_number);
     }
     strncpy(new_booking.date, date, MAX_DATE - 1);
     new_booking.date[MAX_DATE - 1] = '\0';

@@ -3,7 +3,9 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "strutil.h"
 
@@ -41,4 +43,21 @@ int time_to_minutes(const char *time_str) {
     int hours, minutes;
     sscanf(time_str, "%d:%d", &hours, &minutes);
     return hours * 60 + minutes;
+}
+
+int is_valid_resource(const char *resource) {
+    /* must start with "room" (case-insensitive) */
+    if (strncasecmp(resource, "room", 4) != 0) return 0;
+
+    const char *num_part = resource + 4;
+    if (num_part[0] == '\0') return 0;
+
+    int i;
+    for (i = 0; num_part[i] != '\0'; i++) {
+        if (num_part[i] < '0' || num_part[i] > '9') return 0;
+    }
+
+    int n = atoi(num_part);
+    if (n < 1 || n > 10) return 0;
+    return 1;
 }
