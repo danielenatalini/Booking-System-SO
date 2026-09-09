@@ -1,6 +1,6 @@
 /*
 ** users.c
-** File format: username;password;role
+** Formato file: username;password;ruolo
 */
 
 #include <stdio.h>
@@ -43,12 +43,14 @@ int check_login(User list[], int num_elements,
                 *found = list[i];
                 return 0;
             }
-            return -1;
+            return -1;        /* username esiste ma password sbagliata */
         }
     }
-    return -1;
+    return -1;        /* username non trovato */
 }
 
+/* stesso meccanismo di lock di acquire_lock() in archive.c,
+   ma sul file utenti.dat invece che sull'archivio prenotazioni */
 int acquire_users_lock(void) {
     int fd;
     int attempts = 0;
@@ -93,12 +95,14 @@ int username_exists(User list[], int num_elements, const char *username) {
 }
 
 int register_user(const char *username, const char *password) {
-    FILE *f = fopen(USERS_FILE, "a");
+    FILE *f = fopen(USERS_FILE, "a"); 
+    /* "a" = append: aggiunge in coda senza toccare gli utenti già
+   presenti. */
     if (f == NULL) {
         perror("register_user");
         return -1;
     }
-    fprintf(f, "%s;%s;0\n", username, password);
+    fprintf(f, "%s;%s;0\n", username, password);        /* Ruolo sempre 0 (standard): l'admin non è auto-registrabile. */
     fclose(f);
-    return 0;
+    return 0; 
 }
