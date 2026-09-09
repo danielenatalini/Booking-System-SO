@@ -1,6 +1,6 @@
 /*
 ** common.h
-** Shared definitions between server and client.
+** Definizioni condivise tra server e client.
 */
 
 #ifndef COMMON_H
@@ -16,8 +16,8 @@
 #define USERS_LOCK_FILE "utenti.lock"
 
 #define MAX_FIELD 64
-#define MAX_DATE  11   /* "DD/MM/YYYY" */
-#define MAX_TIME  6    /* "HH:MM" */
+#define MAX_DATE  11   /* "GG/MM/AAAA" + terminatore */
+#define MAX_TIME  6    /* "HH:MM" + terminatore */
 
 typedef enum {
     STATUS_PENDING  = 0,
