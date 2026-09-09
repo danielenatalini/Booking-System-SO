@@ -1,8 +1,7 @@
 /*
 ** server.c
-** AF_INET socket server, one child process per client (fork),
-** same accept/fork scheme as server1_INET.c (module 6 - IPC).
-** SIGCHLD handling follows limit.c (module 5 - Signals).
+** Server su socket AF_INET: per ogni client che si connette viene
+** creato un processo figlio separato (fork).
 */
 
 #include <stdio.h>
@@ -23,12 +22,19 @@
 #include "users.h"
 #include "strutil.h"
 
+/* Dati di una singola connessione: se ha fatto login, con quale
+   username e con quale ruolo. Ogni processo figlio ha la sua copia,
+   diversa da quella degli altri client connessi. */
 typedef struct {
     int authenticated;
     char username[MAX_FIELD];
     Role role;
 } Session;
 
+/* Chiamata automaticamente quando un processo figlio termina.
+   Usiamo un ciclo (non un controllo singolo) perchè se due figli
+   terminano quasi insieme potremmo ricevere un solo avviso: il
+   ciclo si assicura di ripulirli tutti, evitando processi zombie. */
 static void handle_sigchld(int sig) {
     (void) sig;
     int status;
@@ -37,6 +43,9 @@ static void handle_sigchld(int sig) {
     }
 }
 
+/* Manda una risposta al client preceduta dalla sua lunghezza: così
+   il client sa esattamente quanti byte aspettarsi, anche se una
+   risposta lunga arriva spezzata. */
 static void send_framed(int sock, const char *msg) {
     char header[16];
     int len = (int) strlen(msg);
@@ -45,18 +54,22 @@ static void send_framed(int sock, const char *msg) {
     write(sock, msg, len);
 }
 
+/* Costruisce e invia una risposta positiva, tipo "OK;dettaglio". */
 static void send_ok(int sock, const char *detail) {
     char buffer[BUFFER_SIZE];
     snprintf(buffer, sizeof(buffer), "OK;%s\n", detail);
     send_framed(sock, buffer);
 }
 
+/* Costruisce e invia una risposta di errore, tipo "ERR;codice;dettaglio". */
 static void send_error(int sock, const char *code, const char *detail) {
     char buffer[BUFFER_SIZE];
     snprintf(buffer, sizeof(buffer), "ERR;%s;%s\n", code, detail);
     send_framed(sock, buffer);
 }
 
+/* Trasforma il valore numerico dello stato (Status) nella parola
+   corrispondente, da mandare al client. */
 static const char *status_to_string(Status s) {
     switch (s) {
         case STATUS_PENDING:  return "pending";
@@ -66,6 +79,8 @@ static const char *status_to_string(Status s) {
     return "unknown";
 }
 
+/* Legge la data di oggi dal computer e la confronta con quella
+   scritta nella prenotazione, per capire se è nel passato. */
 static int is_date_in_past(const char *date) {
     int day, month, year;
     sscanf(date, "%2d/%2d/%4d", &day, &month, &year);
@@ -82,12 +97,15 @@ static int is_date_in_past(const char *date) {
     return requested_value < today_value;
 }
 
+/* Gestisce il comando LOGIN: controlla username e password contro
+   il file utenti.dat, e se sono corretti segna la sessione come
+   autenticata con il ruolo trovato. */
 static void handle_login(int sock, const char *username, const char *password, Session *session) {
     if (username == NULL || password == NULL) {
         send_error(sock, "SYNTAX", "Usage: LOGIN;username;password");
         return;
     }
-
+    
     User user_list[MAX_USERS];
     int num_users = load_users(user_list, MAX_USERS);
     if (num_users < 0) {
@@ -111,6 +129,9 @@ static void handle_login(int sock, const char *username, const char *password, S
     send_ok(sock, detail);
 }
 
+/* Gestisce il comando REGISTER: crea un nuovo utente standard,
+   controllando prima che lo username non sia già usato. L'admin
+   non può registrarsi da qui, viene creato solo a mano nel file. */
 static void handle_register(int sock, const char *username, const char *password) {
     if (username == NULL || password == NULL) {
         send_error(sock, "SYNTAX", "Usage: REGISTER;username;password");
@@ -152,13 +173,16 @@ static void handle_register(int sock, const char *username, const char *password
     send_ok(sock, "Registration completed, you can now log in");
 }
 
+/* Gestisce il comando NEW: controlla che tutto sia scritto bene
+   (risorsa, data, orari), che non ci sia già un'altra prenotazione
+   sulla stessa aula/orario, e se tutto va bene la salva. */
 static void handle_new(int sock, char *resource, char *date,
                         char *start_time, char *end_time, Session *session) {
     if (!session->authenticated) {
         send_error(sock, "AUTH", "You must log in first");
         return;
     }
-        if (resource == NULL || date == NULL || start_time == NULL || end_time == NULL) {
+    if (resource == NULL || date == NULL || start_time == NULL || end_time == NULL) {
         send_error(sock, "SYNTAX", "Usage: NEW;resource;date;start_time;end_time");
         return;
     }
@@ -178,7 +202,7 @@ static void handle_new(int sock, char *resource, char *date,
         send_error(sock, "SYNTAX", "Cannot book a date in the past");
         return;
     }
-        if (time_to_minutes(start_time) >= time_to_minutes(end_time)) {
+    if (time_to_minutes(start_time) >= time_to_minutes(end_time)) {
         send_error(sock, "SYNTAX", "Start time must be earlier than end time");
         return;
     }
@@ -216,9 +240,9 @@ static void handle_new(int sock, char *resource, char *date,
     new_booking.id = next_id(list, n);
     strncpy(new_booking.resource, resource, MAX_FIELD - 1);
     new_booking.resource[MAX_FIELD - 1] = '\0';
-    /* is_valid_resource() already guaranteed the format "Room" + a
-       number 1-10, so we can rebuild it in a canonical, consistent
-       capitalization ("Room1") instead of just lowercasing it. */
+    /* sappiamo gia' che e' "Room" + un numero da 1 a 10, quindi la
+       riscriviamo sempre allo stesso modo (es. "Room1"), qualunque
+       maiuscola/minuscola avesse usato chi ha scritto la richiesta */
     {
         int room_number = atoi(new_booking.resource + 4);
         snprintf(new_booking.resource, MAX_FIELD, "Room%d", room_number);
@@ -249,6 +273,8 @@ static void handle_new(int sock, char *resource, char *date,
     send_ok(sock, detail);
 }
 
+/* Aggiunge una riga di testo (una prenotazione) alla stringa "out",
+   nel formato usato per mandare le liste al client. */
 static void append_list_row(char *out, int out_size, Booking *b) {
     char row[256];
     snprintf(row, sizeof(row), "%d|%s|%s|%s|%s|%s|%s\n",
@@ -257,6 +283,8 @@ static void append_list_row(char *out, int out_size, Booking *b) {
     strncat(out, row, out_size - strlen(out) - 1);
 }
 
+/* Gestisce LIST_MINE: manda al client solo le prenotazioni fatte
+   da lui stesso, controllando lo username lato server. */
 static void handle_list_mine(int sock, Session *session) {
     if (!session->authenticated) {
         send_error(sock, "AUTH", "You must log in first");
@@ -292,16 +320,22 @@ static void handle_list_mine(int sock, Session *session) {
     send_framed(sock, response);
 }
 
+/* Controlla se un valore soddisfa un filtro di ricerca: il simbolo
+   "-" o un filtro vuoto significa "ignora questo campo". */
 static int matches_filter(const char *filter, const char *value) {
     if (filter[0] == '\0' || strcmp(filter, "-") == 0) return 1;
     return strcmp(filter, value) == 0;
 }
 
+/* Come sopra, ma per il campo risorsa, ignorando maiuscole/minuscole
+   (stessa regola usata per il controllo dei conflitti). */
 static int matches_resource_filter(const char *filter, const char *value) {
     if (filter[0] == '\0' || strcmp(filter, "-") == 0) return 1;
     return strcasecmp(filter, value) == 0;
 }
 
+/* Gestisce SEARCH_MINE: come LIST_MINE ma con la possibilità di
+   filtrare per risorsa, data e stato. */
 static void handle_search_mine(int sock, char *resource, char *date, char *status, Session *session) {
     if (!session->authenticated) {
         send_error(sock, "AUTH", "You must log in first");
@@ -343,6 +377,8 @@ static void handle_search_mine(int sock, char *resource, char *date, char *statu
     send_framed(sock, response);
 }
 
+/* Gestisce LIST_ALL: solo l'admin può vedere tutte le prenotazioni
+   di tutti gli utenti, non solo le proprie. */
 static void handle_list_all(int sock, Session *session) {
     if (!session->authenticated) {
         send_error(sock, "AUTH", "You must log in first");
@@ -377,6 +413,8 @@ static void handle_list_all(int sock, Session *session) {
     send_framed(sock, response);
 }
 
+/* Usata da APPROVE, REJECT e SET_STATUS: cambia lo stato di una
+   prenotazione, solo se chi lo chiede è l'admin. */
 static void handle_status_change(int sock, char *id_text, Status new_status, Session *session) {
     if (!session->authenticated) {
         send_error(sock, "AUTH", "You must log in first");
@@ -415,8 +453,10 @@ static void handle_status_change(int sock, char *id_text, Status new_status, Ses
         return;
     }
 
-    /* Before approving, verify it doesn't conflict with another
-       active (non-rejected) booking on the same resource/time. */
+    /* Prima di approvare, controlliamo che non si scontri con
+       un'altra prenotazione ancora valida sulla stessa aula/orario:
+       se una prenotazione viene rifiutata, l'orario si libera e può
+       nascerne una nuova. */
     if (new_status == STATUS_APPROVED) {
         int j;
         for (j = 0; j < n; j++) {
@@ -447,6 +487,8 @@ static void handle_status_change(int sock, char *id_text, Status new_status, Ses
     send_ok(sock, detail);
 }
 
+/* Legge il comando ricevuto (es. "LOGIN;mario;pass123") e chiama
+   la funzione giusta in base alla prima parola del comando. */
 static int handle_command(int sock, char *buffer, Session *session) {
     char *command = strtok(buffer, ";");
     if (command == NULL) {
@@ -517,6 +559,9 @@ static int handle_command(int sock, char *buffer, Session *session) {
     return 0;
 }
 
+/* Ciclo principale di un processo figlio: legge un comando alla
+   volta dalla connessione e lo esegue, finchè il client non manda
+   QUIT o si disconnette. */
 static void handle_client(int connect_socket) {
     char buffer[BUFFER_SIZE];
     Session session;
@@ -540,6 +585,8 @@ int main(void) {
     struct sockaddr_in server_address, client_address;
     char *client_ip;
 
+    /* Controllo iniziale: il file utenti deve esistere e avere
+       almeno l'admin, altrimenti il server non parte nemmeno. */
     User initial_user_list[MAX_USERS];
     int initial_user_count = load_users(initial_user_list, MAX_USERS);
     if (initial_user_count < 0) {
@@ -548,6 +595,8 @@ int main(void) {
     }
     printf("Loaded %d users from %s\n", initial_user_count, USERS_FILE);
 
+    /* Da questo momento, quando un processo figlio termina, viene
+       chiamata handle_sigchld invece di lasciarlo "zombie" */
     signal(SIGCHLD, handle_sigchld);
 
     if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -573,6 +622,7 @@ int main(void) {
 
     client_address_len = sizeof(client_address);
 
+    /* ciclo principale: resta sempre in ascolto di nuove connessioni */
     while (1) {
         connect_socket = accept(server_socket, (struct sockaddr *) &client_address, &client_address_len);
         if (connect_socket == -1) {
@@ -580,6 +630,9 @@ int main(void) {
             continue;
         }
 
+        /* fork() crea una copia del processo: qui dentro siamo nel
+           figlio, che si occupa di un solo client,
+           mentre il padre torna subito ad accettarne altri */
         if (fork() == 0) {
             close(server_socket);
             client_ip = inet_ntoa(client_address.sin_addr);
@@ -592,6 +645,8 @@ int main(void) {
             exit(0);
         }
 
+        /* siamo nel processo padre: non ci serve la socket del
+           client appena creato, la chiudiamo e torniamo al ciclo */
         close(connect_socket);
     }
 
