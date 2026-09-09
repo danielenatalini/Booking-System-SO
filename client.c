@@ -1,5 +1,6 @@
 /*
-** client.c.
+** client.c
+** Client che si connette al server tramite socket TCP.
 */
 
 #include <stdio.h>
