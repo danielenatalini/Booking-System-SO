@@ -1,6 +1,6 @@
 /*
 ** client.c
-** Same connect scheme as client1_INET.c (module 6 - IPC).
+** Stesso schema di connessione di client1_INET.c.
 */
 
 #include <stdio.h>
@@ -14,6 +14,7 @@
 
 #include "common.h"
 
+/* Legge una riga da tastiera, togliendo l'a-capo finale. */
 static void read_line(char *dest, int size) {
     if (fgets(dest, size, stdin) != NULL) {
         int len = strlen(dest);
@@ -23,12 +24,15 @@ static void read_line(char *dest, int size) {
     }
 }
 
+/* Riceve una risposta dal server: prima legge quanto è lunga,
+   poi continua a leggere finchè non ha ricevuto tutti quei byte. */
 static int recv_framed(int sock, char *dest, int max_dest) {
     char header[16];
     int header_len = 0;
     char c;
 
-    /* read the length prefix, one byte at a time, up to the '\n' */
+    /* Legge, un carattere alla volta, il numero che dice quanto è
+       lunga la risposta */
     while (header_len < (int) sizeof(header) - 1) {
         int n = read(sock, &c, 1);
         if (n <= 0) return -1;
@@ -41,9 +45,6 @@ static int recv_framed(int sock, char *dest, int max_dest) {
     if (total < 0) return -1;
     if (total >= max_dest) total = max_dest - 1;
 
-    /* keep reading until we actually have the whole message: a
-       single read() over TCP is not guaranteed to return it all
-       at once. */
     int received = 0;
     while (received < total) {
         int n = read(sock, dest + received, total - received);
@@ -54,6 +55,7 @@ static int recv_framed(int sock, char *dest, int max_dest) {
     return received;
 }
 
+/* Manda un comando al server e aspetta la risposta. */
 static int send_command(int sock, const char *command, char *response, int max_response) {
     char to_send[BUFFER_SIZE];
     snprintf(to_send, sizeof(to_send), "%s\n", command);
@@ -71,13 +73,14 @@ static int send_command(int sock, const char *command, char *response, int max_r
     return n;
 }
 
+/* Prende una risposta e la stampa come una tabella leggibile, riga per riga. */
 static void print_list(const char *response) {
     char copy[BUFFER_SIZE];
     strncpy(copy, response, sizeof(copy) - 1);
     copy[sizeof(copy) - 1] = '\0';
 
     char *line = strtok(copy, "\n");
-    line = strtok(NULL, "\n"); /* skip "OK;LIST" */
+    line = strtok(NULL, "\n");
 
     printf("%-4s %-15s %-12s %-8s %-8s %-12s %-10s\n",
            "ID", "Resource", "Date", "Start", "End", "Requester", "Status");
@@ -99,6 +102,8 @@ static void print_list(const char *response) {
     }
 }
 
+/* Menu per un utente normale: nuova prenotazione, vedi le proprie,
+   cerca tra le proprie, esci. */
 static void standard_menu(int sock) {
     char response[BUFFER_SIZE + 32];
     int choice;
@@ -115,8 +120,8 @@ static void standard_menu(int sock) {
         choice = atoi(buffer);
 
         if (choice == 1) {
-            /* Buffers larger than MAX_DATE/MAX_TIME: fgets needs room
-               to also consume the trailing '\n'. */
+            /* Buffer più grandi di MAX_DATE/MAX_TIME: fgets ha
+               bisogno di spazio anche per l'a-capo finale */
             char resource[MAX_FIELD], date[32], start_time[16], end_time[16];
             printf("Resource (Room1 to Room10): ");
             read_line(resource, sizeof(resource));
@@ -170,6 +175,8 @@ static void standard_menu(int sock) {
     }
 }
 
+/* Menu per l'admin: vedi tutte, approva, rifiuta, cambia stato a
+   mano, esci. */
 static void admin_menu(int sock) {
     char response[BUFFER_SIZE + 32];
     int choice;
@@ -248,6 +255,7 @@ int main(void) {
     int login_success = 0;
     int logged_as_admin = 0;
 
+    /* Si resta in questo ciclo finchè il login non va a buon fine */
     while (!login_success) {
         char initial_choice[8];
         printf("\n1) Log in\n2) Register (new user)\nChoice: ");
@@ -268,7 +276,7 @@ int main(void) {
                 exit(EXIT_FAILURE);
             }
             printf("%s", response);
-            continue;
+            continue;  /* torna al menu iniziale per fare il login */
         }
 
         char username[MAX_FIELD], password[MAX_FIELD];
@@ -295,6 +303,7 @@ int main(void) {
         }
     }
 
+    /* in base al ruolo trovato al login, mostra il menu giusto */
     if (logged_as_admin) admin_menu(client_socket);
     else standard_menu(client_socket);
 
