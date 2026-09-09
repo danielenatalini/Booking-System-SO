@@ -1,6 +1,6 @@
 /*
 ** users.h
-** User management: login, roles, self-registration.
+** Gestione utenti: login, ruoli, registrazione self-service.
 */
 
 #ifndef USERS_H
@@ -16,14 +16,14 @@ typedef struct {
     Role role;
 } User;
 
-int load_users(User list[], int max_elements);
+int load_users(User list[], int max_elements);        /* legge utenti.dat */
 int check_login(User list[], int num_elements,
                  const char *username, const char *password,
-                 User *found);
+                 User *found);        /* verifica credenziali */
 
-int acquire_users_lock(void);
+int acquire_users_lock(void);        /* stesso meccanismo di archive.c */
 void release_users_lock(void);
 int username_exists(User list[], int num_elements, const char *username);
-int register_user(const char *username, const char *password);
+int register_user(const char *username, const char *password);        /* append a utenti.dat */
 
 #endif /* USERS_H */
