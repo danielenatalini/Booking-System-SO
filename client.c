@@ -1,6 +1,5 @@
 /*
-** client.c
-** Stesso schema di connessione di client1_INET.c.
+** client.c.
 */
 
 #include <stdio.h>
