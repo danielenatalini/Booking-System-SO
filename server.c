@@ -240,7 +240,7 @@ static void handle_new(int sock, char *resource, char *date,
     new_booking.id = next_id(list, n);
     strncpy(new_booking.resource, resource, MAX_FIELD - 1);
     new_booking.resource[MAX_FIELD - 1] = '\0';
-    /* sappiamo gia' che e' "Room" + un numero da 1 a 10, quindi la
+    /* sappiamo già che è "Room" + un numero da 1 a 10, quindi la
        riscriviamo sempre allo stesso modo (es. "Room1"), qualunque
        maiuscola/minuscola avesse usato chi ha scritto la richiesta */
     {
