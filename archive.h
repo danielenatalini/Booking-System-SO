@@ -1,6 +1,6 @@
 /*
 ** archive.h
-** Bookings archive: file storage, locking, conflict detection.
+** Archivio prenotazioni: persistenza su file, lock, controllo conflitti.
 */
 
 #ifndef ARCHIVE_H
@@ -8,14 +8,14 @@
 
 #include "common.h"
 
-#define MAX_BOOKINGS 1000
+#define MAX_BOOKINGS 1000 
+/* ampiamente sufficiente per l'uso previsto */
+int acquire_lock(void);    /* mutua esclusione (acquisisce il lock) */
+void release_lock(void);    /* rilascia il lock */
 
-int acquire_lock(void);
-void release_lock(void);
-
-int load_archive(Booking list[], int max_elements);
-int save_archive(Booking list[], int num_elements);
-int next_id(Booking list[], int num_elements);
+int load_archive(Booking list[], int max_elements);    /* legge da file */
+int save_archive(Booking list[], int num_elements);    /* scrive su file */
+int next_id(Booking list[], int num_elements);    /* max id + 1 */
 
 int intervals_overlap(const char *date1, const char *start_time1, const char *end_time1,
                        const char *date2, const char *start_time2, const char *end_time2);
