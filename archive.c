@@ -1,6 +1,6 @@
 /*
 ** archive.c
-** File format: id;resource;date;start_time;end_time;requester;status
+** Formato file: id;risorsa;data;ora_inizio;ora_fine;richiedente;stato
 */
 
 #include <stdio.h>
@@ -24,15 +24,13 @@ int acquire_lock(void) {
             perror("acquire_lock");
             return -1;
         }
-
-        /* If the lock file is old (a crashed process left it behind),
-           remove it instead of waiting forever. Only try this ONCE
-           per call: repeatedly re-checking on every loop iteration
-           would let two waiting processes both decide the lock is
-           stale and race to unlink() it, with one of them possibly
-           deleting a lock that a third process just legitimately
-           created in the meantime. Trying only once keeps that
-           window small. */
+/* Se il lock è vecchio (un processo è crashato mentre lo
+deteneva), lo rimuoviamo invece di aspettare per sempre.
+Ci proviamo UNA SOLA VOLTA per chiamata poichè ripetere il
+controllo ad ogni iterazione permetterebbe a due processi
+in attesa di decidere entrambi che il lock è obsoleto e
+di cancellarlo in corsa, rischiando di eliminare un lock
+appena ricreato legittimamente da un terzo processo. */
         if (!tried_stale_cleanup) {
             struct stat info;
             if (stat(LOCK_FILE, &info) == 0) {
@@ -43,9 +41,9 @@ int acquire_lock(void) {
             tried_stale_cleanup = 1;
         }
 
-        usleep(10000);
+        usleep(10000);        /* attesa attiva: il lock si tiene solo pochi ms */
         attempts++;
-        if (attempts > 5000) { /* about 50 seconds */
+        if (attempts > 5000) {
             fprintf(stderr, "Timeout acquiring archive lock\n");
             return -1;
         }
@@ -55,7 +53,7 @@ int acquire_lock(void) {
 }
 
 void release_lock(void) {
-    unlink(LOCK_FILE);
+    unlink(LOCK_FILE);        /* cancellare il file = rilasciare il lock */
 }
 
 int load_archive(Booking list[], int max_elements) {
@@ -117,10 +115,12 @@ int intervals_overlap(const char *date1, const char *start_time1, const char *en
     int end1   = time_to_minutes(end_time1);
     int start2 = time_to_minutes(start_time2);
     int end2   = time_to_minutes(end_time2);
+    
+    /* si sovrappongono se e solo se ciascuno inizia prima che
+       l'altro finisca */
 
     return (start1 < end2) && (start2 < end1);
 }
-
 int find_conflict(Booking list[], int num_elements,
                    const char *resource, const char *date,
                    const char *start_time, const char *end_time) {
